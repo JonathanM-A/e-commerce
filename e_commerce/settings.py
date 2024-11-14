@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     "apps.users",
     "apps.facilities",
     "apps.inventory",
+    "apps.clients",
+    "apps.pos",
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "django_filters",

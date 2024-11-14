@@ -41,15 +41,18 @@ class WarehouseInventoryViewSet(viewsets.ModelViewSet):
     serializer_class = WarehouseInventorySerializer
     permission_classes = [IsWarehouse]
 
+    filterset_fields = ["inventory_item__product_name", "inventory_item__product_id"]
+    search_fields = []
+
     def get_queryset(self):
         user = self.request.user
         if user.is_superuser or user.has_perm("IsWarehouse"):
             return self.queryset
         return WarehouseInventory.objects.none()
     
-    @action(
-            detail=False, methods=["POST"], permission_classes=[IsWarehouse | IsSuperUser])
+    @action(detail=False, methods=["POST"], permission_classes=[IsWarehouse | IsSuperUser])
     def inbound(self, request):
+        # consider bulk create
         supplier = request.data.get("supplier")
         invoice_no = request.data.get("invoice_no")
         invoice_date = request.data.get("invoice_date")
@@ -98,8 +101,7 @@ class WarehouseInventoryViewSet(viewsets.ModelViewSet):
 
     # IDEA
     # Consider adding batch_no so facilities can track expiries
-    @action(
-        detail=False, methods=["POST"], permission_classes=[IsWarehouse | IsSuperUser])
+    @action(detail=False, methods=["POST"], permission_classes=[IsWarehouse | IsSuperUser])
     def supply(self, request):
         destination_id = request.data.get("facility")
         items = request.data.get("items")
@@ -127,7 +129,6 @@ class WarehouseInventoryViewSet(viewsets.ModelViewSet):
                 warehouse_item = get_object_or_404(
                     WarehouseInventory, inventory_item=inventory_item.id,
                 )
-                # quantity__gte=quantity may work above in place of statement below
 
                 if warehouse_item.quantity < quantity:
                     raise ValidationError(
@@ -154,7 +155,7 @@ class WarehouseInventoryViewSet(viewsets.ModelViewSet):
 
 
 class FacilityInventoryViewSet(viewsets.ModelViewSet):
-    queryset = FacilityInventory.objects.all()
+    queryset = FacilityInventory.objects.select_related("inventory_item", "facility")
     serializer_class = FacilityInventorySerializer
     permission_classes = [IsAuthenticated]
 
@@ -256,13 +257,12 @@ class TransferViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["PATCH"], permission_classes=[IsAdminUser])
     def update_status(self, request, pk=None):
-        user = request.user
         transfer = self.get_object()
         if request.user.facility != transfer.destination:
             return Response("Not authorized")
         new_status = request.data.get("status")
 
-        valid_status = [choice[0] for choice in TransferHistory.STATUS_CHOICES]
+        valid_status = [choice[0] for choice in Transfer.STATUS_CHOICES]
         if new_status not in valid_status:
             raise ValidationError("Invalid status")
 

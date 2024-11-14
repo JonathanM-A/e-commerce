@@ -6,7 +6,7 @@ from django.contrib.auth.models import (
 )
 from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
-from apps.facilities.models import Facility
+from ..facilities.models import Facility
 
 
 class UserManager(BaseUserManager):
@@ -53,11 +53,9 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    email = models.EmailField(max_length=254, unique=True, null=False)
-    name = models.CharField(max_length=255, null=False)
-    facility = models.ForeignKey(
-        Facility, on_delete=models.CASCADE, null=True, related_name="staff"
-    )
+    email = models.EmailField(max_length=254, primary_key=True)
+    name = models.CharField(max_length=255, null=False, blank=False)
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, null=True, related_name="staff")
     is_warehouse = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
@@ -73,3 +71,4 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         db_table = "users"
+

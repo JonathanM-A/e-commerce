@@ -1,7 +1,5 @@
 from rest_framework import viewsets
 from rest_framework.request import Request
-from .models import User
-from .serializers import UserSerializer
 from rest_framework.decorators import action
 from rest_framework.serializers import ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -9,12 +7,19 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenBlacklistView
 from rest_framework_simplejwt.tokens import OutstandingToken, BlacklistedToken
 from django.core.exceptions import PermissionDenied
-from apps.facilities.models import Facility
+from django.db.models import F
+from django.db import transaction
+from .models import User
+from .serializers import UserSerializer
+from ..facilities.models import Facility
 from .permissions import IsAdminUser, IsSuperUser
 
+# Use generic Views
+# Add reset password functionality
+# Check how to send a mail
 
 class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
+    queryset = User.objects.select_related("facility")
     serializer_class = UserSerializer
     permission_classes = [IsSuperUser]
 
@@ -30,27 +35,29 @@ class UserViewSet(viewsets.ModelViewSet):
             permission_classes = [IsAdminUser]
         return [permission() for permission in permission_classes]
 
+    @transaction.atomic
     def perform_create(self, serializer):
         # Increment the staff_number of the facility the user is being added to
-        # Admins can only create staff linked to their facility
-        # Superusers can create staff linked to any facility
         if not self.request.user.is_superuser:
+            # Admins can only create staff linked to their facility
             facility = self.request.user.facility
             serializer.validated_data["facility"] = facility
         else:
+            # Superusers can create staff linked to any facility
             facility = serializer.validated_data.get("facility")
-        # Allowing superusers to be created without a link to a facility
+
+        # Validation: Superusers must specify a facility for non-superusers or non-warehouse
         if facility is None:
-            if (
+            if not (
                 serializer.validated_data.get("is_superuser")
                 or serializer.validated_data.get("is_warehouse")
             ):
                 raise ValidationError("Facility must be provided")
-
+        
+        # Increment facility's staff_number if acility was set
         if facility:
-            facility_instance = Facility.objects.get(id=facility.id)
-            facility_instance.staff_number += 1
-            facility_instance.save()
+            Facility.objects.filter(pk=facility.pk).update(staff_number=F("staff_number") + 1)
+        
         return super().perform_create(serializer)
 
     def perform_update(self, serializer):
@@ -63,7 +70,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["POST"], permission_classes=[IsAuthenticated])
     def change_password(self, request):
-        
+
         user = request.user
         old_password = request.data.get("old password")
         new_password1 = request.data.get("new password")
@@ -82,6 +89,8 @@ class UserViewSet(viewsets.ModelViewSet):
             user.save()
             return Response("Password changed", status=200)
         return Response("Passwords do not match", status=400)
+    
+    # view for forgotten password
 
 
 class LogoutView(TokenBlacklistView):
